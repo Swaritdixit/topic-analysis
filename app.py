@@ -49,11 +49,11 @@ def preprocess_text(text):
     return " ".join(tokens)
 
 st.set_page_config(
-    page_title="BBC News Topic Analyzer",
+    page_title=" Topic Analyzer",
     layout="wide"
 )
 
-st.title("BBC News Topic Analyzer")
+st.title("Topic Analyzer")
 
 article = st.text_area(
     "Paste a news article",
