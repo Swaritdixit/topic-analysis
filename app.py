@@ -6,22 +6,43 @@ import nltk
 import requests
 
 from bs4 import BeautifulSoup
+
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 
-nltk.download("punkt_tab")
-nltk.download("stopwords")
-nltk.download("punkt")
-nltk.download("wordnet")
-nltk.download("omw-1.4")
+from src.summarizer import generate_summary
+from src.sentiment import get_sentiment
+from src.entity_extraction import extract_entities
 
-classifier = joblib.load("models/classifier.pkl")
-tfidf_vectorizer = joblib.load("models/tfidf_vectorizer.pkl")
-lda = joblib.load("models/lda.pkl")
-count_vectorizer = joblib.load("models/count_vectorizer.pkl")
+nltk.download("stopwords", quiet=True)
+nltk.download("punkt", quiet=True)
+nltk.download("wordnet", quiet=True)
+nltk.download("omw-1.4", quiet=True)
+nltk.download("maxent_ne_chunker", quiet=True)
+nltk.download("words", quiet=True)
+nltk.download("averaged_perceptron_tagger", quiet=True)
 
-stop_words = set(stopwords.words("english"))
+classifier = joblib.load(
+    "models/classifier.pkl"
+)
+
+tfidf_vectorizer = joblib.load(
+    "models/tfidf_vectorizer.pkl"
+)
+
+lda = joblib.load(
+    "models/lda.pkl"
+)
+
+count_vectorizer = joblib.load(
+    "models/count_vectorizer.pkl"
+)
+
+stop_words = set(
+    stopwords.words("english")
+)
+
 lemmatizer = WordNetLemmatizer()
 
 topic_names = {
@@ -33,7 +54,9 @@ topic_names = {
 }
 
 def extract_article(url):
+
     try:
+
         headers = {
             "User-Agent": "Mozilla/5.0"
         }
@@ -51,21 +74,38 @@ def extract_article(url):
 
         paragraphs = soup.find_all("p")
 
-        text = " ".join(
+        article_text = " ".join(
             p.get_text(strip=True)
             for p in paragraphs
         )
 
-        return text
+        return article_text
 
     except Exception:
+
         return None
 
 def preprocess_text(text):
+
     text = text.lower()
-    text = re.sub(r"http\S+", "", text)
-    text = re.sub(r"\d+", "", text)
-    text = re.sub(r"[^a-zA-Z\s]", "", text)
+
+    text = re.sub(
+        r"http\S+",
+        "",
+        text
+    )
+
+    text = re.sub(
+        r"\d+",
+        "",
+        text
+    )
+
+    text = re.sub(
+        r"[^a-zA-Z\s]",
+        "",
+        text
+    )
 
     tokens = word_tokenize(text)
 
@@ -87,11 +127,16 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Topic Analyzer")
+st.title(
+    "News Intelligence Platform"
+)
 
 input_type = st.radio(
     "Choose Input Type",
-    ["Article Text", "Article URL"]
+    [
+        "Article Text",
+        "Article URL"
+    ]
 )
 
 article = ""
@@ -114,7 +159,11 @@ if st.button("Analyze"):
     if input_type == "Article URL":
 
         if not article_url.strip():
-            st.warning("Please enter a URL.")
+
+            st.warning(
+                "Please enter a URL."
+            )
+
             st.stop()
 
         article = extract_article(
@@ -122,94 +171,106 @@ if st.button("Analyze"):
         )
 
         if not article:
+
             st.error(
-                "Could not extract article content."
+                "Could not extract article."
             )
+
             st.stop()
 
     else:
 
         if not article.strip():
+
             st.warning(
-                "Please enter a news article."
+                "Please enter an article."
             )
+
             st.stop()
 
     clean_article = preprocess_text(
         article
     )
 
-    article_tfidf = tfidf_vectorizer.transform(
-        [clean_article]
+    article_tfidf = (
+        tfidf_vectorizer.transform(
+            [clean_article]
+        )
     )
 
-    predicted_category = classifier.predict(
-        article_tfidf
-    )[0]
+    predicted_category = (
+        classifier.predict(
+            article_tfidf
+        )[0]
+    )
 
-    probabilities = classifier.predict_proba(
-        article_tfidf
-    )[0]
+    probabilities = (
+        classifier.predict_proba(
+            article_tfidf
+        )[0]
+    )
 
     confidence = (
-        probabilities.max() * 100
+        probabilities.max()
+        * 100
     )
 
-    article_dtm = count_vectorizer.transform(
-        [clean_article]
+    article_dtm = (
+        count_vectorizer.transform(
+            [clean_article]
+        )
     )
 
-    topic_probs = lda.transform(
-        article_dtm
-    )[0]
-
-    predicted_topic = topic_probs.argmax()
-
-    predicted_topic_name = topic_names.get(
-        predicted_topic,
-        f"Topic {predicted_topic}"
+    topic_probs = (
+        lda.transform(
+            article_dtm
+        )[0]
     )
 
-    col1, col2 = st.columns(2)
+    predicted_topic = (
+        topic_probs.argmax()
+    )
+
+    sentiment = get_sentiment(
+        article
+    )
+
+    summary = generate_summary(
+        article
+    )
+
+    entities = extract_entities(
+        article
+    )
+
+    col1, col2, col3 = st.columns(3)
 
     with col1:
+
         st.metric(
-            "Predicted Category",
+            "Category",
             predicted_category
         )
 
     with col2:
+
         st.metric(
-            "Discovered Topic",
-            predicted_topic_name
+            "Confidence",
+            f"{confidence:.2f}%"
+        )
+
+    with col3:
+
+        st.metric(
+            "Sentiment",
+            sentiment
         )
 
     st.subheader(
-        "Classification Confidence"
+        "Article Summary"
     )
 
-    st.progress(
-        int(confidence)
-    )
-
-    st.write(
-        f"{confidence:.2f}%"
-    )
-
-    st.subheader(
-        "Category Probabilities"
-    )
-
-    category_df = pd.DataFrame({
-        "Category": classifier.classes_,
-        "Probability": probabilities
-    })
-
-    st.bar_chart(
-        category_df.set_index(
-            "Category"
-        )
-    )
+    st.write(summary)
 
     st.subheader(
         "Topic Probabilities"
@@ -234,6 +295,23 @@ if st.button("Analyze"):
         )
     )
 
+    st.subheader(
+        "Category Probabilities"
+    )
+
+    category_df = pd.DataFrame({
+        "Category":
+        classifier.classes_,
+        "Probability":
+        probabilities
+    })
+
+    st.bar_chart(
+        category_df.set_index(
+            "Category"
+        )
+    )
+
     feature_names = (
         tfidf_vectorizer
         .get_feature_names_out()
@@ -241,7 +319,10 @@ if st.button("Analyze"):
 
     row = article_tfidf.toarray()[0]
 
-    top_indices = row.argsort()[-10:][::-1]
+    top_indices = (
+        row.argsort()
+        [-10:][::-1]
+    )
 
     keywords = [
         feature_names[i]
@@ -253,21 +334,43 @@ if st.button("Analyze"):
         "Top Keywords"
     )
 
-    keyword_df = pd.DataFrame({
-        "Keyword": keywords
-    })
-
-    st.dataframe(
-        keyword_df,
-        use_container_width=True
+    st.write(
+        ", ".join(keywords)
     )
 
-    with st.expander(
-        "Extracted Article Text"
-    ):
-        st.write(article[:10000])
+    st.subheader(
+        "Named Entities"
+    )
+
+    if entities:
+
+        entity_df = pd.DataFrame(
+            entities,
+            columns=[
+                "Entity",
+                "Type"
+            ]
+        )
+
+        st.dataframe(
+            entity_df,
+            use_container_width=True
+        )
+
+    else:
+
+        st.write(
+            "No entities found."
+        )
 
     with st.expander(
-        "Cleaned Text"
+        "Original Article"
     ):
-        st.write(clean_article[:10000])
+
+        st.write(article)
+
+    with st.expander(
+        "Cleaned Article"
+    ):
+
+        st.write(clean_article)
