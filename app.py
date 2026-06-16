@@ -15,6 +15,14 @@ count_vectorizer = joblib.load("models/count_vectorizer.pkl")
 stop_words = set(stopwords.words("english"))
 lemmatizer = WordNetLemmatizer()
 
+topic_names = {
+    0: "Business",
+    1: "Sports",
+    2: "Politics",
+    3: "Technology",
+    4: "Entertainment"
+}
+
 def preprocess_text(text):
     text = text.lower()
     text = re.sub(r'http\S+', '', text)
@@ -35,6 +43,11 @@ def preprocess_text(text):
 
     return " ".join(tokens)
 
+st.set_page_config(
+    page_title="BBC News Topic Analyzer",
+    layout="wide"
+)
+
 st.title("BBC News Topic Analyzer")
 
 article = st.text_area(
@@ -43,6 +56,10 @@ article = st.text_area(
 )
 
 if st.button("Analyze"):
+
+    if article.strip() == "":
+        st.warning("Please enter a news article.")
+        st.stop()
 
     clean_article = preprocess_text(article)
 
@@ -54,11 +71,11 @@ if st.button("Analyze"):
         article_tfidf
     )[0]
 
-    confidence = (
-        classifier.predict_proba(article_tfidf)
-        .max()
-        * 100
-    )
+    probabilities = classifier.predict_proba(
+        article_tfidf
+    )[0]
+
+    confidence = probabilities.max() * 100
 
     article_dtm = count_vectorizer.transform(
         [clean_article]
@@ -70,17 +87,57 @@ if st.button("Analyze"):
 
     predicted_topic = topic_probs.argmax()
 
-    st.subheader("Predicted Category")
-    st.success(predicted_category)
+    predicted_topic_name = topic_names.get(
+        predicted_topic,
+        f"Topic {predicted_topic}"
+    )
 
-    st.subheader("Confidence")
-    st.write(f"{confidence:.2f}%")
+    col1, col2 = st.columns(2)
 
-    st.subheader("Predicted Topic")
-    st.info(f"Topic {predicted_topic}")
+    with col1:
+        st.metric(
+            "Predicted Category",
+            predicted_category
+        )
+
+    with col2:
+        st.metric(
+            "Discovered Topic",
+            predicted_topic_name
+        )
+
+    st.subheader("Classification Confidence")
+
+    st.progress(int(confidence))
+
+    st.write(
+        f"{confidence:.2f}%"
+    )
+
+    st.subheader("Category Probabilities")
+
+    category_df = pd.DataFrame({
+        "Category": classifier.classes_,
+        "Probability": probabilities
+    })
+
+    st.bar_chart(
+        category_df.set_index("Category")
+    )
 
     st.subheader("Topic Probabilities")
-    st.bar_chart(topic_probs)
+
+    topic_df = pd.DataFrame({
+        "Topic": [
+            topic_names.get(i, f"Topic {i}")
+            for i in range(len(topic_probs))
+        ],
+        "Probability": topic_probs
+    })
+
+    st.bar_chart(
+        topic_df.set_index("Topic")
+    )
 
     feature_names = (
         tfidf_vectorizer
@@ -99,5 +156,19 @@ if st.button("Analyze"):
 
     st.subheader("Top Keywords")
 
-    for word in keywords:
-        st.write("•", word)
+    keyword_df = pd.DataFrame({
+        "Keyword": keywords
+    })
+
+    st.dataframe(
+        keyword_df,
+        use_container_width=True
+    )
+
+    st.subheader("Cleaned Text")
+
+    st.text_area(
+        "",
+        clean_article,
+        height=200
+    )
