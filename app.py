@@ -3,14 +3,18 @@ import pandas as pd
 import joblib
 import re
 import nltk
+import requests
 
+from bs4 import BeautifulSoup
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
+
+nltk.download("punkt_tab")
 nltk.download("stopwords")
 nltk.download("punkt")
 nltk.download("wordnet")
 nltk.download("omw-1.4")
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-from nltk.stem import WordNetLemmatizer
 
 classifier = joblib.load("models/classifier.pkl")
 tfidf_vectorizer = joblib.load("models/tfidf_vectorizer.pkl")
@@ -28,16 +32,46 @@ topic_names = {
     4: "Entertainment"
 }
 
+def extract_article(url):
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=10
+        )
+
+        soup = BeautifulSoup(
+            response.text,
+            "html.parser"
+        )
+
+        paragraphs = soup.find_all("p")
+
+        text = " ".join(
+            p.get_text(strip=True)
+            for p in paragraphs
+        )
+
+        return text
+
+    except Exception:
+        return None
+
 def preprocess_text(text):
     text = text.lower()
-    text = re.sub(r'http\S+', '', text)
-    text = re.sub(r'\d+', '', text)
-    text = re.sub(r'[^a-zA-Z\s]', '', text)
+    text = re.sub(r"http\S+", "", text)
+    text = re.sub(r"\d+", "", text)
+    text = re.sub(r"[^a-zA-Z\s]", "", text)
 
     tokens = word_tokenize(text)
 
     tokens = [
-        word for word in tokens
+        word
+        for word in tokens
         if word not in stop_words
     ]
 
@@ -49,24 +83,61 @@ def preprocess_text(text):
     return " ".join(tokens)
 
 st.set_page_config(
-    page_title=" Topic Analyzer",
+    page_title="Topic Analyzer",
     layout="wide"
 )
 
 st.title("Topic Analyzer")
 
-article = st.text_area(
-    "Paste a news article",
-    height=300
+input_type = st.radio(
+    "Choose Input Type",
+    ["Article Text", "Article URL"]
 )
+
+article = ""
+
+if input_type == "Article Text":
+
+    article = st.text_area(
+        "Paste a news article",
+        height=300
+    )
+
+else:
+
+    article_url = st.text_input(
+        "Paste article URL"
+    )
 
 if st.button("Analyze"):
 
-    if article.strip() == "":
-        st.warning("Please enter a news article.")
-        st.stop()
+    if input_type == "Article URL":
 
-    clean_article = preprocess_text(article)
+        if not article_url.strip():
+            st.warning("Please enter a URL.")
+            st.stop()
+
+        article = extract_article(
+            article_url
+        )
+
+        if not article:
+            st.error(
+                "Could not extract article content."
+            )
+            st.stop()
+
+    else:
+
+        if not article.strip():
+            st.warning(
+                "Please enter a news article."
+            )
+            st.stop()
+
+    clean_article = preprocess_text(
+        article
+    )
 
     article_tfidf = tfidf_vectorizer.transform(
         [clean_article]
@@ -80,7 +151,9 @@ if st.button("Analyze"):
         article_tfidf
     )[0]
 
-    confidence = probabilities.max() * 100
+    confidence = (
+        probabilities.max() * 100
+    )
 
     article_dtm = count_vectorizer.transform(
         [clean_article]
@@ -111,15 +184,21 @@ if st.button("Analyze"):
             predicted_topic_name
         )
 
-    st.subheader("Classification Confidence")
+    st.subheader(
+        "Classification Confidence"
+    )
 
-    st.progress(int(confidence))
+    st.progress(
+        int(confidence)
+    )
 
     st.write(
         f"{confidence:.2f}%"
     )
 
-    st.subheader("Category Probabilities")
+    st.subheader(
+        "Category Probabilities"
+    )
 
     category_df = pd.DataFrame({
         "Category": classifier.classes_,
@@ -127,21 +206,32 @@ if st.button("Analyze"):
     })
 
     st.bar_chart(
-        category_df.set_index("Category")
+        category_df.set_index(
+            "Category"
+        )
     )
 
-    st.subheader("Topic Probabilities")
+    st.subheader(
+        "Topic Probabilities"
+    )
 
     topic_df = pd.DataFrame({
         "Topic": [
-            topic_names.get(i, f"Topic {i}")
-            for i in range(len(topic_probs))
+            topic_names.get(
+                i,
+                f"Topic {i}"
+            )
+            for i in range(
+                len(topic_probs)
+            )
         ],
         "Probability": topic_probs
     })
 
     st.bar_chart(
-        topic_df.set_index("Topic")
+        topic_df.set_index(
+            "Topic"
+        )
     )
 
     feature_names = (
@@ -159,7 +249,9 @@ if st.button("Analyze"):
         if row[i] > 0
     ]
 
-    st.subheader("Top Keywords")
+    st.subheader(
+        "Top Keywords"
+    )
 
     keyword_df = pd.DataFrame({
         "Keyword": keywords
@@ -170,10 +262,12 @@ if st.button("Analyze"):
         use_container_width=True
     )
 
-    st.subheader("Cleaned Text")
+    with st.expander(
+        "Extracted Article Text"
+    ):
+        st.write(article[:10000])
 
-    st.text_area(
-        "",
-        clean_article,
-        height=200
-    )
+    with st.expander(
+        "Cleaned Text"
+    ):
+        st.write(clean_article[:10000])
