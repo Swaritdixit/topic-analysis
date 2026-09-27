@@ -10,3 +10,5 @@ beautifulsoup4
 matplotlib
 seaborn
 wordcloud
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
