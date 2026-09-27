@@ -17,6 +17,7 @@ from src.entity_extraction import extract_entities
 
 nltk.download("stopwords", quiet=True)
 nltk.download("punkt", quiet=True)
+nltk.download("punkt_tab")
 nltk.download("wordnet", quiet=True)
 nltk.download("omw-1.4", quiet=True)
 nltk.download("maxent_ne_chunker", quiet=True)
