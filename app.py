@@ -46,12 +46,25 @@ stop_words = set(
 
 lemmatizer = WordNetLemmatizer()
 
+
+count_feature_names = count_vectorizer.get_feature_names_out()
+
+def get_topic_label(topic_idx, n_words=3):
+    top_word_indices = (
+        lda.components_[topic_idx]
+        .argsort()[-n_words:][::-1]
+    )
+    return ", ".join(
+        count_feature_names[i]
+        for i in top_word_indices
+    )
+
+# Built once from the trained LDA model itself — reflects whatever
+# words each topic actually learned, instead of assuming topic i
+# lines up with a fixed human category name.
 topic_names = {
-    0: "Business",
-    1: "Sports",
-    2: "Politics",
-    3: "Technology",
-    4: "Entertainment"
+    i: get_topic_label(i)
+    for i in range(lda.n_components)
 }
 
 def extract_article(url):
@@ -274,7 +287,12 @@ if st.button("Analyze"):
     st.write(summary)
 
     st.subheader(
-        "Topic Probabilities"
+        "Discovered Topics (LDA)"
+    )
+
+    st.caption(
+        "Each label shows the top words LDA learned for that topic — "
+        "this is independent of the classifier's category prediction below."
     )
 
     topic_df = pd.DataFrame({
