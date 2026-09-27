@@ -2,111 +2,172 @@
 
 An NLP-powered **News Intelligence Platform** built with Python, Machine Learning, NLP, and Streamlit.
 
-The application analyzes news articles from either **pasted text or a URL** and provides:
+Topic Analyzer analyzes news articles from either **pasted text or a URL** and provides:
 
-- News category classification
-- Classification confidence
-- Topic modeling
-- Extractive article summarization
-- Sentiment analysis
-- TF-IDF keyword extraction
-- Named entity recognition
-- Interactive visualizations
+* News category classification
+* Classification probabilities and confidence
+* Topic and subtopic discovery
+* Topic-specific supporting sentences
+* Extractive article summarization
+* Sentiment analysis
+* TF-IDF keyword extraction
+* Named Entity Recognition
+* Interactive analysis through Streamlit
 
-🔗 **Live Demo:** https://topic-analyser.streamlit.app/
+**Live Demo:** https://topic-analyser.streamlit.app/
 
 ---
 
-## ✨ Features
+## Features
 
 ### 📰 News Classification
 
-Predicts the category of a news article using a trained **Multinomial Naive Bayes** classifier with TF-IDF features.
+The application classifies an article into one of five categories using:
 
-The model supports five categories:
+**TF-IDF → Multinomial Naive Bayes**
 
-- Business
-- Politics
-- Sports
-- Technology
-- Entertainment
+Supported categories:
 
-The application also displays the probability associated with each predicted category.
+* Business
+* Politics
+* Sports
+* Technology
+* Entertainment
 
----
+The application also displays the probability assigned to each category using `predict_proba()`.
 
-### 🔍 Topic Modeling
-
-Uses **Latent Dirichlet Allocation (LDA)** to discover hidden topics in news articles.
-
-The trained LDA model:
-
-- Uses 5 topics
-- Produces a topic distribution for each article
-- Displays topic probabilities in the application
-- Allows comparison between discovered topics and original news categories
+> The displayed "confidence" represents the highest predicted class probability. It should not be interpreted as model accuracy.
 
 ---
 
-### ✂️ Article Summarization
+### 🔍 Topic and Subtopic Modeling
 
-Generates an **extractive summary** from an article.
+Topic discovery is performed using **Latent Dirichlet Allocation (LDA)** with five latent topics.
 
-The summarizer:
+Unlike supervised classification, LDA does not use the predefined BBC categories. Instead, it discovers recurring word patterns and topic structures from the articles.
 
-1. Splits the article into sentences.
-2. Calculates word frequencies.
-3. Scores sentences according to the frequency of their words.
-4. Selects the highest-scoring sentences.
-5. Combines them into a concise summary.
+The application displays:
 
-This provides a lightweight summarization approach without requiring a large transformer model.
+* Topic probability distribution
+* Significant topics
+* Top words associated with each topic
+* Interpretable topic descriptions
+* Topic-specific supporting sentences
+
+A separate topic-specific TF-IDF vectorizer is used for the LDA pipeline.
 
 ---
 
-### 😊 Sentiment Analysis
+### Topic-Specific Evidence
 
-Uses **TextBlob** to calculate the polarity of an article.
+The application goes beyond displaying topic probabilities.
 
-The resulting sentiment is classified as:
+For each significant topic:
 
-- Positive
-- Negative
-- Neutral
+1. The article is split into sentences.
+2. Each sentence is transformed using the topic TF-IDF vectorizer.
+3. LDA estimates the topic distribution of each sentence.
+4. Sentences are ranked according to their probability for the selected topic.
+5. The strongest supporting sentences are displayed.
 
-The classification is based on polarity thresholds.
+This provides sentence-level evidence for why a topic is considered significant.
+
+If no individual sentence crosses the configured threshold, the application indicates that the topic signal is distributed across the article rather than strongly concentrated in one sentence.
+
+---
+
+### ✂️ Extractive Article Summarization
+
+The summarizer generates a lightweight **extractive summary** without using a transformer or generative language model.
+
+The process is:
+
+```text
+Article
+   │
+   ▼
+Sentence Splitting
+   │
+   ▼
+Word Tokenization
+   │
+   ▼
+Stopword Removal
+   │
+   ▼
+Word Frequency Calculation
+   │
+   ▼
+Sentence Scoring
+   │
+   ▼
+Top Sentences
+   │
+   ▼
+Extractive Summary
+```
+
+The highest-scoring sentences are selected and combined to form the final summary.
+
+---
+
+### Sentiment Analysis
+
+Sentiment analysis is performed using **TextBlob**.
+
+TextBlob calculates a polarity score, which is mapped to:
+
+* Positive
+* Negative
+* Neutral
+
+The application uses polarity thresholds to determine the final sentiment.
 
 ---
 
 ### 🔑 Keyword Extraction
 
-Uses TF-IDF scores to identify important words in an article.
+The classification TF-IDF representation is also used to identify the most prominent terms in an article.
 
-The application extracts the highest-scoring terms and displays them as the article's top keywords.
+The application:
+
+1. Transforms the article using the trained TF-IDF vectorizer.
+2. Retrieves the feature weights.
+3. Ranks the terms by their TF-IDF scores.
+4. Displays the highest-scoring terms as keywords.
+
+The classifier itself uses the complete TF-IDF feature vector; keyword extraction is a separate interpretation layer built on top of those feature weights.
 
 ---
 
-### 🧑‍💼 Named Entity Recognition
+### Named Entity Recognition
 
-Uses NLTK's named entity recognition pipeline to identify entities such as:
+Named Entity Recognition identifies important entities appearing in the article.
 
-- People
-- Organizations
-- Locations
-- Other recognized named entities
+The application primarily uses **spaCy**, with an **NLTK fallback**.
 
-The detected entities are displayed in a structured table.
+Detected entity types can include:
+
+* Person
+* Organization
+* Location
+* Geopolitical Entity
+* Nationality / Religious / Political Group
+* Facility
+* Event
+
+The detected entities are cleaned, deduplicated, and displayed in a structured format.
 
 ---
 
 ### 🌐 URL-Based Article Analysis
 
-Users can provide either:
+Users can analyze either:
 
-- Direct article text
-- A news article URL
+* Pasted article text
+* A news article URL
 
-For URL input, the application:
+For URL input, the application uses `Requests` and `BeautifulSoup` to extract article paragraphs.
 
 ```text
 Article URL
@@ -124,93 +185,94 @@ Extract <p> Elements
 Article Text
      │
      ▼
-NLP Pipeline
+NLP Analysis Pipeline
 ```
 
-The extracted article is then passed through the same analysis pipeline.
+The request uses a browser-like User-Agent and a timeout to improve compatibility with common news websites.
+
+URL extraction may not work correctly for websites that:
+
+* Render article content entirely with JavaScript
+* Require authentication
+* Use strong bot protection
+* Place unrelated content inside `<p>` elements
+* Require a subscription or paywall
 
 ---
 
-## 📊 Dataset
+## Dataset
 
-The project uses the **BBC News Dataset**.
+The project uses the **BBC News Dataset** containing 2,225 news articles across five categories.
 
-The dataset contains:
+| Category      |  Articles |
+| ------------- | --------: |
+| Sport         |       511 |
+| Business      |       510 |
+| Politics      |       417 |
+| Technology    |       401 |
+| Entertainment |       386 |
+| **Total**     | **2,225** |
 
-**2,225 news articles**
+Each article contains information such as:
 
-| Category | Articles |
-|---|---:|
-| Sport | 511 |
-| Business | 510 |
-| Politics | 417 |
-| Technology | 401 |
-| Entertainment | 386 |
-| **Total** | **2,225** |
-
-Each article contains information including:
-
-- Category
-- Filename
-- Title
-- Content
+* Category
+* Filename
+* Title
+* Content
 
 ---
 
 ## 🧠 Machine Learning Pipeline
 
-The overall NLP pipeline is:
+The overall system combines supervised learning, unsupervised topic modeling, and additional NLP analysis.
 
 ```text
-BBC News Dataset
-       │
-       ▼
-Exploratory Data Analysis
-       │
-       ▼
-Text Preprocessing
-       │
-       ├── Lowercasing
-       ├── URL Removal
-       ├── Number Removal
-       ├── Tokenization
-       ├── Stopword Removal
-       └── Lemmatization
-       │
-       ▼
-Cleaned Text
-       │
-       ├───────────────────┐
-       │                   │
-       ▼                   ▼
-   TF-IDF             Count Vectorizer
-       │                   │
-       ▼                   ▼
-Multinomial NB            LDA
-       │                   │
-       ▼                   ▼
-Classification        Topic Modeling
-```
-
-Additional NLP analysis is performed on the original article text:
-
-```text
-Original Article
-       │
-       ├── Extractive Summarization
-       ├── Sentiment Analysis
-       └── Named Entity Recognition
+                         BBC News Dataset
+                                │
+                                ▼
+                     Exploratory Data Analysis
+                                │
+                                ▼
+                       Text Preprocessing
+                                │
+                ┌───────────────┴────────────────┐
+                │                                │
+                ▼                                ▼
+        Classification Pipeline            Topic Pipeline
+                │                                │
+                ▼                                ▼
+             TF-IDF                    Topic TF-IDF
+                │                                │
+                ▼                                ▼
+     Multinomial Naive Bayes                    LDA
+                │                                │
+                ▼                                ▼
+     News Category Prediction          Topic Distribution
+                │                                │
+                │                         Sentence-Level
+                │                         Topic Evidence
+                │                                │
+                └───────────────┬────────────────┘
+                                │
+                    ┌───────────┼───────────┐
+                    │           │           │
+                    ▼           ▼           ▼
+               Summary     Sentiment       NER
+                    │           │           │
+                    └───────────┼───────────┘
+                                ▼
+                         Streamlit Dashboard
 ```
 
 ---
 
-## 🔬 Text Preprocessing
+## Text Preprocessing
 
-The preprocessing pipeline performs:
+The preprocessing pipeline performs the following operations:
 
 ### 1. Lowercasing
 
-Converts all text to lowercase.
+Converts text to lowercase.
 
 ```text
 "Technology News"
@@ -224,13 +286,17 @@ URLs are removed using regular expressions.
 
 ### 3. Number Removal
 
-Numeric characters are removed.
+Numeric characters are removed from the text.
 
-### 4. Tokenization
+### 4. Non-Alphabetic Character Removal
+
+Non-alphabetic characters are removed before tokenization.
+
+### 5. Tokenization
 
 The article is split into individual words using NLTK.
 
-### 5. Stopword Removal
+### 6. Stopword Removal
 
 Common English stopwords are removed.
 
@@ -244,9 +310,17 @@ of
 to
 ```
 
-### 6. Lemmatization
+### 7. Lemmatization
 
 Words are reduced to their base form using NLTK's `WordNetLemmatizer`.
+
+For example:
+
+```text
+running → running
+cars    → car
+better  → better
+```
 
 ---
 
@@ -261,30 +335,66 @@ Cleaned Article
 TF-IDF Vectorizer
       │
       ▼
-Feature Vector
+Numerical Feature Vector
       │
       ▼
 Multinomial Naive Bayes
       │
-      ▼
-Predicted Category
+      ├── predict()
+      │
+      └── predict_proba()
+              │
+              ▼
+     Category + Probabilities
 ```
 
-The trained model and vectorizer are saved using `joblib`.
+### What TF-IDF does
 
-Saved artifacts:
+TF-IDF converts text into numerical features based on how important a word is within a document and across the collection of documents.
+
+Conceptually:
 
 ```text
-models/
-├── classifier.pkl
-└── tfidf_vectorizer.pkl
+TF-IDF = Term Frequency × Inverse Document Frequency
 ```
+
+A word receives a higher weight when it is important within a document but is not equally common across the entire dataset.
+
+### Why the vectorizer is saved
+
+The trained TF-IDF vectorizer stores:
+
+* Vocabulary
+* Feature ordering
+* IDF values
+* Feature configuration
+
+The same vectorizer must therefore be used during inference.
+
+The application uses:
+
+```python
+vectorizer.transform(text)
+```
+
+rather than fitting a new vectorizer for every article.
+
+### Multinomial Naive Bayes
+
+Multinomial Naive Bayes is used as the supervised classifier because it is:
+
+* Fast
+* Lightweight
+* Well suited to text classification
+* Simple to train and deploy
+
+The model learns the relationship between text features and the five known news categories.
 
 ---
 
 ## 🧩 LDA Topic Modeling
 
-Topic discovery uses **Latent Dirichlet Allocation**.
+Topic discovery uses **Latent Dirichlet Allocation (LDA)**.
 
 The project uses:
 
@@ -292,39 +402,83 @@ The project uses:
 Number of Topics = 5
 ```
 
-The LDA pipeline is:
+The topic pipeline uses a separate TF-IDF representation from the classification pipeline.
 
 ```text
 Cleaned Articles
-      │
-      ▼
-Count Vectorization
-      │
-      ▼
-Document-Term Matrix
-      │
-      ▼
+       │
+       ▼
+Topic TF-IDF Vectorizer
+       │
+       ▼
+Document-Term Representation
+       │
+       ▼
 LDA
-      │
-      ▼
-5 Topic Distributions
+       │
+       ▼
+5 Latent Topic Distributions
 ```
 
-The trained artifacts are stored as:
+### What LDA provides
+
+For every article, LDA produces a probability distribution across the five discovered topics.
+
+For example:
 
 ```text
-models/
-├── lda.pkl
-└── count_vectorizer.pkl
+Topic 1 → 0.08
+Topic 2 → 0.52
+Topic 3 → 0.11
+Topic 4 → 0.21
+Topic 5 → 0.08
 ```
 
-The project also generates:
+The topic numbers themselves do not have predefined meanings.
 
-- Topic distribution
-- Category vs. topic comparison
-- Topic percentage distribution
-- Top words for each topic
-- Category-topic heatmap
+The application interprets them using the highest-weighted words associated with each topic.
+
+For example:
+
+```text
+Topic 1
+├── election
+├── government
+├── minister
+├── parliament
+└── vote
+```
+
+A human can interpret this topic as being related to politics, but LDA itself only discovers the underlying word patterns.
+
+---
+
+## Sentence-Level Topic Analysis
+
+The application performs an additional analysis to determine which sentences support each significant topic.
+
+```text
+Article
+   │
+   ▼
+Split into Sentences
+   │
+   ▼
+Topic TF-IDF Transformation
+   │
+   ▼
+LDA Topic Probabilities
+   │
+   ▼
+Rank Sentences by Topic Score
+   │
+   ▼
+Select Strong Supporting Sentences
+```
+
+Up to two strong sentences can be displayed for each significant topic.
+
+This makes the topic analysis more interpretable because the user can see actual evidence from the article rather than only a numerical topic distribution.
 
 ---
 
@@ -332,22 +486,22 @@ The project also generates:
 
 The project includes exploratory analysis of the BBC News dataset.
 
-The EDA pipeline examines:
+The EDA examines:
 
-- Dataset dimensions
-- Column information
-- Missing values
-- Category distribution
-- Article length
-- Average article length by category
-- Word frequency
+* Dataset dimensions
+* Column information
+* Missing values
+* Category distribution
+* Article length
+* Average article length by category
+* Word frequency
 
 Visualizations include:
 
-- Category distribution
-- Article length distribution
-- Average article length by category
-- Word cloud
+* Category distribution
+* Article length distribution
+* Average article length by category
+* Word cloud
 
 ---
 
@@ -365,9 +519,9 @@ topic-analysis/
 │
 ├── models/
 │   ├── classifier.pkl
-│   ├── count_vectorizer.pkl
 │   ├── lda.pkl
-│   └── tfidf_vectorizer.pkl
+│   ├── tfidf_vectorizer.pkl
+│   └── topic_tfidf_vectorizer.pkl
 │
 ├── src/
 │   ├── download_nltk.py
@@ -396,81 +550,83 @@ topic-analysis/
 The Streamlit application follows this workflow:
 
 ```text
-                 ┌───────────────────┐
-                 │ User Input        │
-                 │ Text / URL        │
-                 └─────────┬─────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │ Article         │
-                  │ Extraction      │
-                  └────────┬────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │ Preprocessing   │
-                  └────────┬────────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-              ▼            ▼            ▼
-         Classification    LDA       TF-IDF
-              │            │            │
-              ▼            ▼            ▼
-          Category       Topics      Keywords
-              │
-              └────────────┬────────────┐
-                           │            │
-                           ▼            ▼
-                      Sentiment     NER
-                           │            │
-                           └─────┬──────┘
-                                 ▼
-                          Streamlit UI
+                    ┌──────────────────────┐
+                    │      User Input      │
+                    │      Text / URL      │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │ Article Extraction   │
+                    │ if URL is provided   │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │ Text Preprocessing   │
+                    └──────────┬───────────┘
+                               │
+             ┌─────────────────┼─────────────────┐
+             │                 │                 │
+             ▼                 ▼                 ▼
+        Classification    Topic Modeling    NLP Analysis
+             │                 │                 │
+             ▼                 ▼          ┌──────┼──────┐
+        TF-IDF + NB          LDA          │      │      │
+             │                 │          ▼      ▼      ▼
+             ▼                 ▼       Summary Sentiment NER
+        Category +        Topics          │      │      │
+        Probabilities         │           └──────┼──────┘
+             │                 │                  │
+             └─────────────────┼──────────────────┘
+                               ▼
+                    ┌──────────────────────┐
+                    │   Streamlit UI       │
+                    └──────────────────────┘
 ```
 
-The application displays:
+The dashboard displays:
 
-- Predicted category
-- Classification confidence
-- Sentiment
-- Article summary
-- Topic probabilities
-- Category probabilities
-- Top keywords
-- Named entities
-- Original article
-- Cleaned article
+* Predicted category
+* Category probabilities
+* Classification confidence
+* Sentiment
+* Extractive summary
+* Topic distribution
+* Topic-specific supporting sentences
+* Top keywords
+* Named entities
+* Original article
+* Cleaned article
 
 ---
 
 ## 🛠️ Technology Stack
 
-| Area | Technologies |
-|---|---|
-| Language | Python |
-| Interface | Streamlit |
-| Data Processing | Pandas, NumPy |
-| Machine Learning | Scikit-learn |
-| Classification | Multinomial Naive Bayes |
-| Feature Extraction | TF-IDF, Count Vectorizer |
-| Topic Modeling | LDA |
-| NLP | NLTK |
-| Sentiment | TextBlob |
-| Web Scraping | Requests, BeautifulSoup |
-| Model Serialization | Joblib |
-| Visualization | Matplotlib, Seaborn |
-| Word Analysis | WordCloud |
+| Area                | Technologies            |
+| ------------------- | ----------------------- |
+| Language            | Python                  |
+| Interface           | Streamlit               |
+| Data Processing     | Pandas, NumPy           |
+| Machine Learning    | Scikit-learn            |
+| Classification      | Multinomial Naive Bayes |
+| Feature Extraction  | TF-IDF                  |
+| Topic Modeling      | LDA                     |
+| NLP                 | NLTK, spaCy             |
+| Sentiment Analysis  | TextBlob                |
+| Web Scraping        | Requests, BeautifulSoup |
+| Model Serialization | Joblib                  |
+| Visualization       | Matplotlib, Seaborn     |
+| Word Analysis       | WordCloud               |
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
-- Python 3.x
-- pip
+* Python 3.x
+* pip
 
 ### 1. Clone the Repository
 
@@ -501,11 +657,11 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Download NLTK Resources
+### 4. Download NLP Resources
 
-The application downloads the required NLTK resources when it starts.
+The application handles the required NLTK resources during startup.
 
-The project also contains:
+The repository also contains:
 
 ```text
 src/download_nltk.py
@@ -519,15 +675,15 @@ which can be used to prepare the required NLTK resources.
 streamlit run app.py
 ```
 
-Streamlit will provide the local application URL in the terminal.
+The application will be available at the local Streamlit URL shown in the terminal.
 
 ---
 
 ## 🔄 Retraining the Models
 
-The repository includes the trained model artifacts, so the Streamlit application can use the existing models directly.
+The repository contains pre-trained model artifacts, so the deployed application does not retrain models for every request.
 
-The individual training/analysis scripts are located in `src/`.
+The training and analysis scripts are located inside `src/`.
 
 ### Preprocessing
 
@@ -535,7 +691,7 @@ The individual training/analysis scripts are located in `src/`.
 python src/preprocessing.py
 ```
 
-Generates:
+Generates the cleaned dataset:
 
 ```text
 data/bbc_news_cleaned.csv
@@ -554,166 +710,142 @@ models/classifier.pkl
 models/tfidf_vectorizer.pkl
 ```
 
-### Train the LDA Model
+### Train the Topic Model
 
 ```bash
 python src/topic_modeling.py
 ```
 
-Generates:
+Generates the LDA model and topic-specific vectorizer used by the topic pipeline.
 
 ```text
 models/lda.pkl
-models/count_vectorizer.pkl
-data/bbc_news_topics.csv
+models/topic_tfidf_vectorizer.pkl
 ```
 
 ---
 
 ## 📦 Saved Model Artifacts
 
-The repository contains pre-trained artifacts so that the deployed application does not need to retrain the models for every request.
+The application uses serialized models and vectorizers stored in the `models/` directory.
 
-```text
-models/
-│
-├── classifier.pkl
-├── tfidf_vectorizer.pkl
-├── lda.pkl
-└── count_vectorizer.pkl
-```
+| File                         | Purpose                                                     |
+| ---------------------------- | ----------------------------------------------------------- |
+| `classifier.pkl`             | Trained Multinomial Naive Bayes classifier                  |
+| `tfidf_vectorizer.pkl`       | TF-IDF vectorizer for classification and keyword extraction |
+| `lda.pkl`                    | Trained LDA topic model                                     |
+| `topic_tfidf_vectorizer.pkl` | TF-IDF vectorizer used by the topic pipeline                |
 
-These artifacts are loaded by `app.py` using `joblib`.
+Using saved artifacts allows the deployed application to perform inference without retraining the models for each request.
 
 ---
 
-## 📌 Key Implementation Details
+## Deployment
+
+The application is deployed using **Streamlit Community Cloud**.
+
+Live application:
+
+https://topic-analyser.streamlit.app/
+
+The deployment uses the repository's:
+
+```text
+app.py
+requirements.txt
+models/
+src/
+```
+
+The pre-trained artifacts are loaded when the application starts.
+
+---
+
+## Limitations
+
+The current system uses lightweight classical NLP techniques, so there are several areas that can be improved.
+
+### Article Extraction
+
+The URL extractor relies on HTML paragraph elements and may not work reliably with JavaScript-heavy websites or protected pages.
 
 ### Classification
 
-**Algorithm:** Multinomial Naive Bayes
+The classifier is trained on the BBC News dataset, so its performance may differ on articles from other sources or domains.
 
-**Features:** TF-IDF
+### Topic Interpretation
 
-**Vocabulary:** Maximum 5,000 features
-
-**Train/Test Split:** 80/20
-
-```text
-Training Data
-     │
-     ▼
-TF-IDF
-     │
-     ▼
-80% Training ───────► Multinomial NB
-                         │
-20% Testing ────────────┘
-                         │
-                         ▼
-                  Classification
-```
-
----
-
-### Topic Modeling
-
-**Algorithm:** Latent Dirichlet Allocation
-
-**Number of topics:** 5
-
-**Features:** Count Vectorization
-
-The model produces a probability distribution across the discovered topics for each article.
-
----
+LDA produces latent topics rather than human-readable topic names. Topic labels are interpreted using their highest-weighted words.
 
 ### Summarization
 
-The summarizer is **extractive**, meaning it selects important sentences from the original article rather than generating new sentences.
+The summarizer is extractive and frequency-based. It does not generate new sentences or understand article context like modern transformer-based summarizers.
 
-This makes it lightweight and easy to run without a large language model.
+### Sentiment
 
----
+TextBlob provides a general polarity score and may struggle with sarcasm, complex context, or domain-specific language.
 
-### Sentiment Analysis
+### Preprocessing
 
-TextBlob calculates the polarity of the article.
-
-```text
-Polarity > 0.1       → Positive
-
-Polarity < -0.1      → Negative
-
-Otherwise            → Neutral
-```
+Classical preprocessing techniques may remove contextual information that modern language models can preserve.
 
 ---
 
-### Named Entity Recognition
+## Future Improvements
 
-The application uses NLTK POS tagging and named entity chunking to identify entities in the original article.
+Potential improvements include:
 
----
-
-## 🌐 Deployment
-
-The application is deployed using **Streamlit**.
-
-### Live Application
-
-🔗 **https://topic-analyser.streamlit.app/**
-
-The deployed application loads the pre-trained models from the repository and performs inference on user-provided articles.
-
----
-
-## 🔮 Future Improvements
-
-- Transformer-based summarization
-- BERT-based topic modeling
-- Transformer-based text classification
-- Semantic keyword extraction
-- Improved named entity recognition
-- Better article extraction for different news websites
-- Multi-language news analysis
-- Real-time news ingestion
-- News recommendation system
-- Model evaluation dashboard
-- More robust preprocessing
-- Automated model retraining pipeline
+* Transformer-based text classification
+* Transformer-based abstractive summarization
+* Semantic keyword extraction
+* Better article-content extraction
+* Multilingual news analysis
+* Real-time news ingestion
+* Topic naming using language models
+* Improved topic coherence evaluation
+* Model performance dashboard
+* Automated model retraining
+* More robust preprocessing and evaluation
+* Article recommendation based on semantic similarity
 
 ---
 
-## 🎯 What I Learned
+## What I Learned
 
-This project provided hands-on experience with an end-to-end NLP workflow:
+This project helped me understand how multiple NLP techniques can be combined into a single end-to-end application.
 
-- Exploratory Data Analysis
-- Text preprocessing
-- Tokenization
-- Stopword removal
-- Lemmatization
-- TF-IDF feature engineering
-- Naive Bayes classification
-- Model evaluation
-- LDA topic modeling
-- Extractive summarization
-- Sentiment analysis
-- Named entity recognition
-- Web scraping
-- Model serialization with Joblib
-- Building an interactive Streamlit application
-- Deploying an ML/NLP application
+Key areas explored include:
+
+* Text preprocessing
+* Tokenization and lemmatization
+* TF-IDF feature engineering
+* Multinomial Naive Bayes
+* Probability-based classification
+* Unsupervised topic modeling with LDA
+* Sentence-level topic analysis
+* Extractive summarization
+* Sentiment analysis
+* Named Entity Recognition
+* Web scraping
+* Model serialization with Joblib
+* Streamlit application development
+* Deployment of ML applications
+
+The project also demonstrates how traditional machine learning and NLP techniques can be combined to build an interpretable news analysis platform.
 
 ---
 
-## 👨‍💻 Author
+## Author
 
 **Swarit Dixit**
 
-B.Tech Electronics & Communication Engineering  
-IIT Bhilai
+B.Tech ECE, IIT Bhilai
 
-- 💻 GitHub: https://github.com/Swaritdixit
-- 💼 LinkedIn: https://www.linkedin.com/in/swarit-dixit-b907b8309/
+* GitHub: https://github.com/Swaritdixit
+* LinkedIn: https://www.linkedin.com/in/swarit-dixit-b907b8309/
+
+---
+
+## License
+
+This project is intended for educational and portfolio purposes.
