@@ -20,11 +20,6 @@ nltk.download("punkt", quiet=True)
 nltk.download("punkt_tab", quiet=True)          
 nltk.download("wordnet", quiet=True)
 nltk.download("omw-1.4", quiet=True)
-nltk.download("maxent_ne_chunker", quiet=True)
-nltk.download("maxent_ne_chunker_tab", quiet=True)  
-nltk.download("words", quiet=True)
-nltk.download("averaged_perceptron_tagger", quiet=True)
-nltk.download("averaged_perceptron_tagger_eng", quiet=True) 
 
 classifier = joblib.load(
     "models/classifier.pkl"
@@ -34,12 +29,9 @@ tfidf_vectorizer = joblib.load(
     "models/tfidf_vectorizer.pkl"
 )
 
+
 lda = joblib.load(
     "models/lda.pkl"
-)
-
-count_vectorizer = joblib.load(
-    "models/count_vectorizer.pkl"
 )
 
 stop_words = set(
@@ -48,7 +40,7 @@ stop_words = set(
 
 lemmatizer = WordNetLemmatizer()
 
-count_feature_names = count_vectorizer.get_feature_names_out()
+tfidf_feature_names = tfidf_vectorizer.get_feature_names_out()
 
 def get_topic_label(topic_idx, n_words=3):
     top_word_indices = (
@@ -56,7 +48,7 @@ def get_topic_label(topic_idx, n_words=3):
         .argsort()[-n_words:][::-1]
     )
     return ", ".join(
-        count_feature_names[i]
+        tfidf_feature_names[i]
         for i in top_word_indices
     )
 
@@ -87,10 +79,14 @@ def extract_article(url):
 
         paragraphs = soup.find_all("p")
 
+       
         article_text = " ".join(
-            p.get_text(strip=True)
+            p.get_text(separator=" ", strip=True)
             for p in paragraphs
         )
+
+        # Collapse any double spaces left behind by the separator.
+        article_text = re.sub(r"\s+", " ", article_text).strip()
 
         return article_text
 
@@ -228,15 +224,9 @@ if st.button("Analyze"):
         * 100
     )
 
-    article_dtm = (
-        count_vectorizer.transform(
-            [clean_article]
-        )
-    )
-
     topic_probs = (
         lda.transform(
-            article_dtm
+            article_tfidf
         )[0]
     )
 
@@ -286,21 +276,22 @@ if st.button("Analyze"):
     st.write(summary)
 
     st.subheader(
-        "Discovered Topics (LDA)"
+        "Subtopics Found in This Article (LDA on TF-IDF)"
     )
 
     st.caption(
-        "Each label is the top words LDA learned for that topic. Below "
-        "each, the sentence from THIS article that best represents it -- "
-        "independent of the classifier's category prediction below."
+        "The LDA model learns its topics from TF-IDF-weighted terms. "
+        "Below, only the topics that actually show up in THIS article "
+        "are listed as subtopics -- ranked by how much of the article "
+        "they cover -- each with real example sentences pulled from "
+        "the text, independent of the classifier's category below."
     )
 
     raw_sentences = sent_tokenize(article)
 
-   
-    best_sentence_for_topic = {
-        i: (None, 0.0)
-        for i in range(lda.n_components)
+    SENTENCE_MIN_SCORE = 0.0   # keep every scored sentence as a candidate
+    sentence_matches_by_topic = {
+        i: [] for i in range(lda.n_components)
     }
 
     for raw_sentence in raw_sentences:
@@ -310,42 +301,64 @@ if st.button("Analyze"):
         if not clean_sentence.strip():
             continue
 
-        sentence_dtm = count_vectorizer.transform(
+        sentence_tfidf = tfidf_vectorizer.transform(
             [clean_sentence]
         )
 
-        if sentence_dtm.sum() == 0:
+        if sentence_tfidf.nnz == 0:
             continue
 
         sentence_topic_probs = lda.transform(
-            sentence_dtm
+            sentence_tfidf
         )[0]
 
         dominant_topic = sentence_topic_probs.argmax()
         score = sentence_topic_probs[dominant_topic]
 
-        if score > best_sentence_for_topic[dominant_topic][1]:
-            best_sentence_for_topic[dominant_topic] = (
-                raw_sentence.strip(),
-                score
+        if score > SENTENCE_MIN_SCORE:
+            sentence_matches_by_topic[dominant_topic].append(
+                (raw_sentence.strip(), score)
             )
 
-    for i in range(lda.n_components):
+    for topic_sentences in sentence_matches_by_topic.values():
+        topic_sentences.sort(key=lambda pair: pair[1], reverse=True)
+
+    SUBTOPIC_WEIGHT_THRESHOLD = 0.15
+    EXAMPLES_PER_SUBTOPIC = 2
+
+    ranked_topics = sorted(
+        range(lda.n_components),
+        key=lambda i: topic_probs[i],
+        reverse=True
+    )
+
+    subtopics = [
+        i for i in ranked_topics
+        if topic_probs[i] >= SUBTOPIC_WEIGHT_THRESHOLD
+    ]
+
+  
+    if not subtopics:
+        subtopics = ranked_topics[:2]
+
+    for rank, i in enumerate(subtopics, start=1):
 
         label = topic_names.get(i, f"Topic {i}")
-        sentence, sentence_score = best_sentence_for_topic[i]
         article_weight_pct = topic_probs[i] * 100
+        examples = sentence_matches_by_topic[i][:EXAMPLES_PER_SUBTOPIC]
 
         st.markdown(
-            f"**Topic {i + 1}: {label}** "
+            f"**Subtopic {rank}: {label}** "
             f"— {article_weight_pct:.1f}% of this article"
         )
 
-        if sentence:
-            st.write(f"> {sentence}")
+        if examples:
+            for sentence, sentence_score in examples:
+                st.write(f"> {sentence}")
         else:
             st.write(
-                "_No sentence in this article strongly matches this topic._"
+                "_No sentence in this article strongly matches this "
+                "subtopic; the signal is spread across the whole text._"
             )
 
         st.write("")
