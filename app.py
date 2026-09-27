@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
+from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.stem import WordNetLemmatizer
 
 from src.summarizer import generate_summary
@@ -17,12 +17,14 @@ from src.entity_extraction import extract_entities
 
 nltk.download("stopwords", quiet=True)
 nltk.download("punkt", quiet=True)
-nltk.download("punkt_tab")
+nltk.download("punkt_tab", quiet=True)          
 nltk.download("wordnet", quiet=True)
 nltk.download("omw-1.4", quiet=True)
 nltk.download("maxent_ne_chunker", quiet=True)
+nltk.download("maxent_ne_chunker_tab", quiet=True)  
 nltk.download("words", quiet=True)
 nltk.download("averaged_perceptron_tagger", quiet=True)
+nltk.download("averaged_perceptron_tagger_eng", quiet=True) 
 
 classifier = joblib.load(
     "models/classifier.pkl"
@@ -45,7 +47,6 @@ stop_words = set(
 )
 
 lemmatizer = WordNetLemmatizer()
-
 
 count_feature_names = count_vectorizer.get_feature_names_out()
 
@@ -140,7 +141,7 @@ st.set_page_config(
 )
 
 st.title(
-    "Article Intelligence Platform"
+    "News Intelligence Platform"
 )
 
 input_type = st.radio(
@@ -289,28 +290,65 @@ if st.button("Analyze"):
     )
 
     st.caption(
-        "Each label shows the top words LDA learned for that topic — "
-        "this is independent of the classifier's category prediction below."
+        "Each label is the top words LDA learned for that topic. Below "
+        "each, the sentence from THIS article that best represents it -- "
+        "independent of the classifier's category prediction below."
     )
 
-    topic_df = pd.DataFrame({
-        "Topic": [
-            topic_names.get(
-                i,
-                f"Topic {i}"
-            )
-            for i in range(
-                len(topic_probs)
-            )
-        ],
-        "Probability": topic_probs
-    })
+    raw_sentences = sent_tokenize(article)
 
-    st.bar_chart(
-        topic_df.set_index(
-            "Topic"
+   
+    best_sentence_for_topic = {
+        i: (None, 0.0)
+        for i in range(lda.n_components)
+    }
+
+    for raw_sentence in raw_sentences:
+
+        clean_sentence = preprocess_text(raw_sentence)
+
+        if not clean_sentence.strip():
+            continue
+
+        sentence_dtm = count_vectorizer.transform(
+            [clean_sentence]
         )
-    )
+
+        if sentence_dtm.sum() == 0:
+            continue
+
+        sentence_topic_probs = lda.transform(
+            sentence_dtm
+        )[0]
+
+        dominant_topic = sentence_topic_probs.argmax()
+        score = sentence_topic_probs[dominant_topic]
+
+        if score > best_sentence_for_topic[dominant_topic][1]:
+            best_sentence_for_topic[dominant_topic] = (
+                raw_sentence.strip(),
+                score
+            )
+
+    for i in range(lda.n_components):
+
+        label = topic_names.get(i, f"Topic {i}")
+        sentence, sentence_score = best_sentence_for_topic[i]
+        article_weight_pct = topic_probs[i] * 100
+
+        st.markdown(
+            f"**Topic {i + 1}: {label}** "
+            f"— {article_weight_pct:.1f}% of this article"
+        )
+
+        if sentence:
+            st.write(f"> {sentence}")
+        else:
+            st.write(
+                "_No sentence in this article strongly matches this topic._"
+            )
+
+        st.write("")
 
     st.subheader(
         "Category Probabilities"
