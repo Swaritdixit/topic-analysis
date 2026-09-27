@@ -59,9 +59,7 @@ def get_topic_label(topic_idx, n_words=3):
         for i in top_word_indices
     )
 
-# Built once from the trained LDA model itself — reflects whatever
-# words each topic actually learned, instead of assuming topic i
-# lines up with a fixed human category name.
+
 topic_names = {
     i: get_topic_label(i)
     for i in range(lda.n_components)
@@ -142,7 +140,7 @@ st.set_page_config(
 )
 
 st.title(
-    "News Intelligence Platform"
+    "Article Intelligence Platform"
 )
 
 input_type = st.radio(
