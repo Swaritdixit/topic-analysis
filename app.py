@@ -30,6 +30,10 @@ tfidf_vectorizer = joblib.load(
 )
 
 
+topic_vectorizer = joblib.load(
+    "models/topic_tfidf_vectorizer.pkl"
+)
+
 lda = joblib.load(
     "models/lda.pkl"
 )
@@ -40,23 +44,7 @@ stop_words = set(
 
 lemmatizer = WordNetLemmatizer()
 
-tfidf_feature_names = tfidf_vectorizer.get_feature_names_out()
-
-def get_topic_label(topic_idx, n_words=3):
-    top_word_indices = (
-        lda.components_[topic_idx]
-        .argsort()[-n_words:][::-1]
-    )
-    return ", ".join(
-        tfidf_feature_names[i]
-        for i in top_word_indices
-    )
-
-
-topic_names = {
-    i: get_topic_label(i)
-    for i in range(lda.n_components)
-}
+topic_feature_names = topic_vectorizer.get_feature_names_out()
 
 def extract_article(url):
 
@@ -79,13 +67,13 @@ def extract_article(url):
 
         paragraphs = soup.find_all("p")
 
-       
+    
         article_text = " ".join(
             p.get_text(separator=" ", strip=True)
             for p in paragraphs
         )
 
-        # Collapse any double spaces left behind by the separator.
+     
         article_text = re.sub(r"\s+", " ", article_text).strip()
 
         return article_text
@@ -224,9 +212,17 @@ if st.button("Analyze"):
         * 100
     )
 
+    # LDA runs on its own topic-specific TF-IDF vector (see model
+    # loading above) -- separate from the classifier's TF-IDF vector.
+    article_topic_tfidf = (
+        topic_vectorizer.transform(
+            [clean_article]
+        )
+    )
+
     topic_probs = (
         lda.transform(
-            article_tfidf
+            article_topic_tfidf
         )[0]
     )
 
@@ -280,7 +276,6 @@ if st.button("Analyze"):
     )
 
     st.caption(
-        "The LDA model learns its topics from TF-IDF-weighted terms. "
         "Below, only the topics that actually show up in THIS article "
         "are listed as subtopics -- ranked by how much of the article "
         "they cover -- each with real example sentences pulled from "
@@ -289,10 +284,8 @@ if st.button("Analyze"):
 
     raw_sentences = sent_tokenize(article)
 
-    SENTENCE_MIN_SCORE = 0.0   # keep every scored sentence as a candidate
-    sentence_matches_by_topic = {
-        i: [] for i in range(lda.n_components)
-    }
+
+    sentence_records = []
 
     for raw_sentence in raw_sentences:
 
@@ -301,30 +294,26 @@ if st.button("Analyze"):
         if not clean_sentence.strip():
             continue
 
-        sentence_tfidf = tfidf_vectorizer.transform(
+        sentence_topic_tfidf = topic_vectorizer.transform(
             [clean_sentence]
         )
 
-        if sentence_tfidf.nnz == 0:
+        if sentence_topic_tfidf.nnz == 0:
             continue
 
         sentence_topic_probs = lda.transform(
-            sentence_tfidf
+            sentence_topic_tfidf
         )[0]
 
-        dominant_topic = sentence_topic_probs.argmax()
-        score = sentence_topic_probs[dominant_topic]
+        sentence_records.append(
+            (raw_sentence.strip(), sentence_topic_probs)
+        )
 
-        if score > SENTENCE_MIN_SCORE:
-            sentence_matches_by_topic[dominant_topic].append(
-                (raw_sentence.strip(), score)
-            )
-
-    for topic_sentences in sentence_matches_by_topic.values():
-        topic_sentences.sort(key=lambda pair: pair[1], reverse=True)
 
     SUBTOPIC_WEIGHT_THRESHOLD = 0.15
     EXAMPLES_PER_SUBTOPIC = 2
+
+    MIN_EXAMPLE_SCORE = (1.0 / lda.n_components) * 1.7
 
     ranked_topics = sorted(
         range(lda.n_components),
@@ -337,18 +326,31 @@ if st.button("Analyze"):
         if topic_probs[i] >= SUBTOPIC_WEIGHT_THRESHOLD
     ]
 
-  
+ 
     if not subtopics:
         subtopics = ranked_topics[:2]
 
     for rank, i in enumerate(subtopics, start=1):
 
-        label = topic_names.get(i, f"Topic {i}")
         article_weight_pct = topic_probs[i] * 100
-        examples = sentence_matches_by_topic[i][:EXAMPLES_PER_SUBTOPIC]
+
+        # Score every sentence specifically against THIS subtopic (not
+        # its own argmax), so a sentence that's a strong secondary match
+        # for this subtopic can still surface as an example.
+        candidates = sorted(
+            (
+                (sentence, probs[i])
+                for sentence, probs in sentence_records
+                if probs[i] >= MIN_EXAMPLE_SCORE
+            ),
+            key=lambda pair: pair[1],
+            reverse=True
+        )
+
+        examples = candidates[:EXAMPLES_PER_SUBTOPIC]
 
         st.markdown(
-            f"**Subtopic {rank}: {label}** "
+            f"**Subtopic {rank}** "
             f"— {article_weight_pct:.1f}% of this article"
         )
 
@@ -357,8 +359,9 @@ if st.button("Analyze"):
                 st.write(f"> {sentence}")
         else:
             st.write(
-                "_No sentence in this article strongly matches this "
-                "subtopic; the signal is spread across the whole text._"
+                "_No single sentence strongly matches this subtopic on "
+                "its own -- the signal is spread thinly across the "
+                "whole article._"
             )
 
         st.write("")
