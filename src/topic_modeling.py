@@ -2,23 +2,27 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
-from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
 
 df = pd.read_csv("data/bbc_news_cleaned.csv")
+df["clean_content"] = df["clean_content"].fillna("")
 
-vectorizer = CountVectorizer( max_df=0.95,min_df=2,stop_words="english")
+tfidf_vectorizer = joblib.load("models/tfidf_vectorizer.pkl")
 
-dtm = vectorizer.fit_transform(df["clean_content"])
+tfidf_matrix = tfidf_vectorizer.transform(df["clean_content"])
 
-lda = LatentDirichletAllocation(n_components=5,random_state=42)
+lda = LatentDirichletAllocation(
+    n_components=5,
+    random_state=42,
+    max_iter=15,
+    learning_method="batch"
+)
 
-lda.fit(dtm)
+lda.fit(tfidf_matrix)
 joblib.dump(lda, "models/lda.pkl")
-joblib.dump(vectorizer, "models/count_vectorizer.pkl")
 
-print("LDA model saved")
-feature_names = vectorizer.get_feature_names_out()
+print("LDA model (trained on TF-IDF) saved")
+feature_names = tfidf_vectorizer.get_feature_names_out()
 
 for topic_idx, topic in enumerate(lda.components_):
 
@@ -32,7 +36,7 @@ for topic_idx, topic in enumerate(lda.components_):
 
     print(" ".join(top_words))
 
-topic_results = lda.transform(dtm)
+topic_results = lda.transform(tfidf_matrix)
 
 df["topic"] = topic_results.argmax(axis=1)
 
