@@ -1,15 +1,15 @@
 import nltk
+import sys
+import traceback
+
 
 def extract_entities(text):
 
     entities = []
 
     try:
-
         tokens = nltk.word_tokenize(text)
-
         pos_tags = nltk.pos_tag(tokens)
-
         chunks = nltk.ne_chunk(pos_tags)
 
         for chunk in chunks:
@@ -30,7 +30,20 @@ def extract_entities(text):
                     )
                 )
 
-    except Exception:
-        pass
+    except LookupError as e:
+      
+        print(
+            "[entity_extraction] Missing NLTK resource - "
+            f"run nltk.download() for it. Details: {e}",
+            file=sys.stderr
+        )
 
-    return list(set(entities))
+    except Exception:
+        print(
+            "[entity_extraction] Unexpected error during NER:",
+            file=sys.stderr
+        )
+        traceback.print_exc()
+
+
+    return list(dict.fromkeys(entities))
